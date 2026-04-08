@@ -1,4 +1,4 @@
-# elsi
+# Elsi
 ELKS Linux System Installer
 
 ```
