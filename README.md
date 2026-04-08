@@ -9,7 +9,7 @@ An ELKS System Installer
 ~ elsi ~
 ```
 
-**ELSI** is a proposed downstream distribution built on top of
+**Elsi** is a proposed downstream distribution built on top of
 [ELKS](https://github.com/ghaerr/elks) (Embeddable Linux Kernel Subset),
 targeting vintage 16-bit IBM PC compatible and NEC PC-98 hardware.
 
