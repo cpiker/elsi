@@ -1,5 +1,5 @@
 # Elsi
-ELKS Linux System Installer
+An ELKS System Installer
 
 ```
 }     {
