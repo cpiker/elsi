@@ -26,5 +26,7 @@ Design notes are in the `.md` files in this repository.
 **The Name**
 
 *Pronounce it *"el-see"* (English) or *"el-shee"* (Japanese: エルシ), whichever
-works better for you.  Elsi sounds like a pet, and these old machines are kept
-alive out of affection, not utility.*
+works better for you.*
+
+*Elsi sounds like a pet, and these old machines are kept alive out of affection,
+not utility.*
