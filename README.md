@@ -1,2 +1,29 @@
 # elsi
 ELKS Linux System Installer
+
+```
+}     {
+ }( ){
+ (^ ^)
+  \_/
+~ elsi ~
+```
+
+**ELSI** is a proposed downstream distribution built on top of
+[ELKS](https://github.com/ghaerr/elks) (Embeddable Linux Kernel Subset),
+targeting vintage 16-bit IBM PC compatible and NEC PC-98 hardware.
+
+The goal is to make ELKS accessible to people who want to run it on old
+machines without building a cross-compiler toolchain or navigating
+`make menuconfig` themselves. ELSI provides pre-built kernel images, a
+floppy-based installer, and a minimal package manager suited to 640K and
+a 4.77 MHz 8088.
+
+Pronounce it *"el-see"* (English) or *"el-shee"* (Japanese: エルシ).
+
+**This project is in the exploratory phase.** Nothing is implemented yet.
+Design notes are in the `.md` files in this repository.
+
+---
+
+*"These old machines are kept alive out of affection, not utility."*
