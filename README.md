@@ -15,7 +15,7 @@ targeting vintage 16-bit IBM PC compatible and NEC PC-98 hardware.
 
 The goal is to make ELKS accessible to people who want to run it on old
 machines without building a cross-compiler toolchain or navigating
-`make menuconfig` themselves. ELSI provides pre-built kernel images, a
+`make menuconfig` themselves. Elsi provides pre-built kernel images, a
 floppy-based installer, and a minimal package manager suited to 640K and
 a 4.77 MHz 8088.
 
