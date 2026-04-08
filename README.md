@@ -19,11 +19,12 @@ machines without building a cross-compiler toolchain or navigating
 floppy-based installer, and a minimal package manager suited to 640K and
 a 4.77 MHz 8088.
 
-Pronounce it *"el-see"* (English) or *"el-shee"* (Japanese: エルシ).
-
 **This project is in the exploratory phase.** Nothing is implemented yet.
 Design notes are in the `.md` files in this repository.
 
 ---
+**The Name**
 
-*"These old machines are kept alive out of affection, not utility."*
+*Pronounce it *"el-see"* (English) or *"el-shee"* (Japanese: エルシ), whichever
+works better for you.  Elsi sounds like a pet, and these old machines are kept
+alive out of affection, not utility.*
