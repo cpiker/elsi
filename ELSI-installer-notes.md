@@ -36,7 +36,7 @@ This serves several purposes:
 - Gives the user immediate confirmation that the machine booted correctly
 - Catches obvious wrong-platform situations early (wrong floppy, wrong arch)
 - Produces a permanent hardware record written to the installed system under
-  `/var/hardware` that can be used for debugging and bug reports
+  `/var/hwreport` that can be used for debugging and bug reports
 - Provides input to later stages — detected hardware may inform `/bootopts`
   defaults or warn about known conflicts
 
@@ -49,7 +49,7 @@ the state file records which probe was in progress. On the next boot the
 installer can warn: *"Last time we tried to check [thing] and did not come back.
 Skip it this time? [Y/n]"*
 
-The hardware report file at `/var/hardware` is a permanent plain text file
+The hardware report file at `/var/hwreport` is a permanent plain text file
 written by the installer and left on the installed system. It is not a package
 and is not tracked by the package manager. It is system-generated metadata.
 
@@ -256,7 +256,7 @@ Same as `nic_verify` but for a SLIP COM port IRQ change. Expected to be rare.
 
 1. Ask for FTP server IP address (raw IP — no DNS assumed on an 8088)
 2. Test connectivity (FTP `LIST` of the package directory)
-3. **Success**: write server address to `/var/elsipkg/repos` on the target,
+3. **Success**: write server address to `/var/elsi/repos` on the target,
    write `phase=fetch` to `/state`, proceed immediately
 4. **Failure**: print diagnosis; offer to correct IP and retry
 

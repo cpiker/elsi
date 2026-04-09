@@ -89,9 +89,9 @@ consume directory entries and add path overhead; on IA-16 hardware with Minix
 filesystems and limited RAM, this is not free. A subdirectory must earn its place.
 
 Applied in practice:
-- `/var/elsipkg/` is justified — the package manager owns multiple related files
+- `/var/elsi/` is justified — the package manager owns multiple related files
   with more planned, and grouping them is correct.
-- `/var/hardware` lives directly in `/var` — it is one file with no siblings yet.
+- `/var/hwreport` lives directly in `/var` — it is one file with no siblings yet.
   If ELSI-specific files in `/var` multiply, a subdirectory can be created then.
 
 ---

@@ -12,7 +12,7 @@ its interface, repository handling, index formats, and file locations.*
 The `elsi` command is the user-facing tool for managing packages on an installed
 ELSI system. It handles searching, installing, removing, and listing packages.
 It is not involved in the initial installation — that is the installer's job.
-The installer creates `/var/elsipkg/` and populates the initial `repos` file
+The installer creates `/var/elsi/` and populates the initial `repos` file
 before handing off to the package manager for the first package fetch.
 
 ---
@@ -58,21 +58,54 @@ more than one repo.
 - `elsi remove <name>` — remove an installed package (tombstone in index)
 - `elsi list` — list installed packages
 - `elsi update` — refresh all cached repo index files from their FTP sources
-- `elsi gc` — compact tombstoned records from the installed index
+- `elsi tidy` — compact tombstoned records from the installed index
 
 ---
 
 ## Filesystem Paths
 
 ```
-/var/elsipkg/instpkgs.idx  ← installed package index
-/var/elsipkg/repos         ← repository definitions (INI format, human-edited)
-/var/elsipkg/<tag>.idx     ← per-repo cached package index (e.g. elsi.idx, home.idx)
+/var/hwreport              ← hardware detection report (installer-generated)
+/var/elsi/instpkgs.idx     ← installed package index
+/var/elsi/repos            ← repository definitions (INI format, human-edited)
+/var/elsi/<tag>.idx        ← per-repo cached package index (e.g. elsi.idx, home.idx)
+/var/elsi/lock             ← package manager lock file (prevents concurrent elsi runs)
+/var/elsi/info/<stem>      ← per-package info file: description + file list
 ```
 
-The package manager must fail with a clear, actionable error if `/var/elsipkg/`
+The `info/` subdirectory holds one file per installed package, extracted from
+the package tarball at install time. Each file combines the full package
+description and the list of files written to the filesystem, separated by a
+`---` delimiter:
+
+```
+3025 battletech mech record sheet generator
+Use this program to design legal battletech record sheets and print
+them on a dot-matrix printer. All 3025-era equipment is supported.
+---
+/usr/bin/mechb
+/usr/share/man/man1/mechb.1
+/etc/mechb.conf
+```
+
+`elsi remove` reads the file list section to know what to delete from the
+filesystem. `elsi info` reads the description section. Info files carry no
+extension — the directory context makes their purpose clear.
+
+Info files are retained through tombstone (`R`) status and deleted only when
+`elsi tidy` compacts the record out of the installed index. A package with
+status `N` (needed, not yet fetched) has no info file — its description is
+served from the cached repo index until install time.
+
+The `lock` file is created at the start of any operation that modifies
+`instpkgs.idx` or the `info/` tree, and removed on clean exit. Its presence
+prevents concurrent `elsi` invocations from corrupting the index. ELKS is
+multi-user; concurrent package operations are a real risk.
+
+The package manager must fail with a clear, actionable error if `/var/elsi/`
 does not exist. It must not silently create the directory or produce cryptic
-errors. Creating `/var/elsipkg/` is the installer's responsibility.
+errors. Creating `/var/elsi/` and `/var/elsi/info/` is the installer's
+responsibility.
 
 Tarball caching is explicitly out of scope for rev 0.1. Packages are fetched,
 unpacked, and discarded. No tarballs are retained on the target disk.
@@ -81,7 +114,7 @@ unpacked, and discarded. No tarballs are retained on the target disk.
 
 ## Repository Definition File: `repos`
 
-`/var/elsipkg/repos` defines the package repositories available to the package
+`/var/elsi/repos` defines the package repositories available to the package
 manager. It uses INI-style format.
 
 ### Format
@@ -152,14 +185,44 @@ not be used as a repository name in `repos`.
 ## Per-Repo Index Files: `<tag>.idx`
 
 Each repository has a cached copy of its server-side package index, stored at
-`/var/elsipkg/<tag>.idx`. These files are fetched from the FTP server by
+`/var/elsi/<tag>.idx`. These files are fetched from the FTP server by
 `elsi update` and are the source of truth for `elsi search` and `elsi info`
 on packages not yet installed.
 
-The format of the per-repo `.idx` files is not yet designed. It shares the
-line-oriented flat-file philosophy of `instpkgs.idx` but serves a different
-purpose — package discovery rather than installation tracking. See Deferred
-Topics below.
+Unlike `instpkgs.idx`, the per-repo index is read-only on the client and
+replaced wholesale by `elsi update`. It requires no random access — `elsi search`
+scans it linearly. Fixed-width records would waste wire bytes; the format is
+variable-length, one stanza per package, blank-line terminated:
+
+```
+mechb10x
+3025 battletech mech record sheet generator
+Use this program to design legal battletech record sheets and print
+them on a dot-matrix printer. All 3025-era equipment is supported.
+md5 d41d8cd98f00b204e9800998ecf8427e
+
+sh___X10
+Bourne-compatible shell
+The standard ELKS shell. Supports job control, here-docs, and most
+POSIX sh syntax. Statically linked, no dependencies.
+md5 7215ee9c7d9dc229d2921a40e899ec5f
+
+```
+
+Field order within a stanza: filename stem (primary key and first line),
+short description (one line, used by `elsi search`), long description (one or
+more lines), `md5` checksum line, blank line terminator.
+
+The `md5` line gives `elsi install` the checksum it needs to verify a fetched
+tarball without a second round-trip to the server. MD5 is chosen for
+computational cheapness on IA-16 hardware, not security.
+
+`elsi search` reads the stem and short description line of each stanza; it
+skips to the next blank line without reading the long description unless a
+match is found. `elsi info` on an uninstalled package reads the full stanza.
+
+The full format specification belongs in the `elsipkg.5` man page. See
+Deferred Topics below.
 
 ---
 
@@ -173,27 +236,29 @@ Key properties:
 - Fixed-width records, 80 bytes including newline
 - Status field supports `I` (installed), `R` (tombstone), `N` (needed), `U` (update)
 - Removal flips status to `R` rather than deleting the record — single byte write
-- Compaction via `elsi gc` is a separate explicit operation
+- Compaction via `elsi tidy` is a separate explicit operation
 - A file of only `N` records is a valid install queue — hand-editing is supported
+- Each installed package has a corresponding `info/<stem>` file (description +
+  file list); retained through `R` status, removed by `elsi tidy`
 
 ---
 
 ## Deferred Topics
 
-- **Per-repo `.idx` format** — the server-side index format needs its own spec.
-  Discovery (what is available) vs. tracking (what is installed) are different
-  use cases. The installed index's fixed-width record format may not be the right
-  fit for a discovery index where description length matters more than seek speed.
 - **`elsi repos` command** — listing configured repositories with their
   descriptions and connectivity status. Not yet designed.
-- **`elsi gc` specification** — when is it safe to run, what does it report,
-  does it require the system to be quiescent?
+- **`elsi tidy` specification** — when is it safe to run, what does it report,
+  does it require the system to be quiescent? Must also remove the corresponding
+  `info/<stem>` file when compacting a tombstoned record.
+- **`elsi tidy` and the lock file** — `elsi tidy` rewrites `instpkgs.idx` in full
+  (read, filter, rewrite). It must hold the lock for the entire rewrite. Specify
+  crash recovery: if the process dies mid-rewrite, is the index recoverable?
 - **Ambiguity resolution policy** — short name resolution when a package exists
   in multiple repos or in both platform variants needs a fully specified
   algorithm, not just the outline above.
-- **`elsipkg.5` man page** — the authoritative format reference for both
-  `instpkgs.idx` and `repos`. Section 5 is correct for file format
-  documentation.
+- **`elsipkg.5` man page** — the authoritative format reference for
+  `instpkgs.idx`, `repos`, the per-repo `.idx` stanza format, and the `info/`
+  file format. Section 5 is correct for file format documentation.
 
 ---
 

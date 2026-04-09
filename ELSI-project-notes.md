@@ -247,7 +247,7 @@ this use case — computationally cheap, fits the era, not being used for securi
 ## Installed Package Index
 
 The installed package index is ELSI's runtime record of what is on the system.
-It lives at `/var/elsipkg/instpkgs.idx` (see Filesystem Paths below).
+It lives at `/var/elsi/instpkgs.idx` (see Filesystem Paths below).
 
 ### Design Principles
 
@@ -270,7 +270,7 @@ handle 80-column files naturally.
 Removed packages are not deleted from the index immediately. Instead the status
 byte is flipped to `R` (tombstone) and the record is retained. This makes removal
 a single-byte write rather than a file rewrite, which is important on slow
-hardware. Compaction is a separate explicit operation (`elsi gc`).
+hardware. Compaction is a separate explicit operation (`elsi tidy`).
 
 ### File Layout
 
@@ -310,7 +310,7 @@ See `elsipkg.5` for decoding.
 **Source — Repository tag (columns 12–16, 5 characters, left-aligned,
 space-padded)**
 
-A short tag referencing an entry in `/var/elsipkg/repos`. One keyword is reserved
+A short tag referencing an entry in `/var/elsi/repos`. One keyword is reserved
 and may not be used as a repo name:
 
 | Keyword | Meaning |
@@ -339,7 +339,7 @@ use it for dependency or ordering decisions.
 
 ### Repository File
 
-`/var/elsipkg/repos` defines the package repositories available to the package
+`/var/elsi/repos` defines the package repositories available to the package
 manager. It uses INI-style format: one named section per repository, with keyword
 lines underneath. See ELSI-pkgmgr-notes.md for the full format specification and
 a sample file.
@@ -391,32 +391,36 @@ ELSI-specific runtime state (cache, logs, etc.) without touching `/etc`.
 ELSI filesystem paths:
 
 ```
-/var/elsipkg/instpkgs.idx  ← installed package index
-/var/elsipkg/repos         ← repository definitions (INI format)
-/var/elsipkg/<name>.idx    ← per-repo cached package index (e.g. elsi.idx, home.idx)
-/var/hardware              ← hardware detection report (installer-generated)
+/var/hwreport              ← hardware detection report (installer-generated)
+/var/elsi/instpkgs.idx     ← installed package index
+/var/elsi/repos            ← repository definitions (INI format)
+/var/elsi/<tag>.idx        ← per-repo cached package index (e.g. elsi.idx, home.idx)
+/var/elsi/lock             ← package manager lock file (prevents concurrent elsi runs)
+/var/elsi/info/<stem>      ← per-package info file: description + file list
 ```
-
 Notes on the `.idx` extension: it is used for index files because it describes
 function (this is an index) rather than format encoding. It follows the same
 reasoning as `.list` and `.md5sums` in Debian's dpkg — extensions that describe
 what the file *is*, not how it is internally structured. The `repos` file carries
 no extension, consistent with Linux convention for human-edited configuration
-files (cf. `fstab`, `passwd`, `hosts`).
+files (cf. `fstab`, `passwd`, `hosts`). Info files under `info/` carry no
+extension — the directory context makes their purpose clear.
 
-Tarball caching is out of scope for rev 0.1. The `/var/elsipkg/` directory
-contains no package tarballs — only index files and the repository definition.
+Tarball caching is out of scope for rev 0.1. The `/var/elsi/` directory
+contains no package tarballs — only index files, the repository definition,
+the lock file, and the `info/` tree.
 
 Future paths (not yet designed):
 
 ```
-/var/elsipkg/log           ← install/remove history log
+/var/elsi/log              ← install/remove history log
 ```
 
 The package manager must fail with a clear, actionable error message if
-`/var/elsipkg/` does not exist. It must not silently create files elsewhere or
-produce cryptic errors. The installer is responsible for creating `/var/elsipkg/`
-during first-time setup; the package manager is not responsible for creating it.
+`/var/elsi/` does not exist. It must not silently create files elsewhere or
+produce cryptic errors. The installer is responsible for creating `/var/elsi/`
+and `/var/elsi/info/` during first-time setup; the package manager is not
+responsible for creating them.
 
 ---
 
@@ -435,7 +439,7 @@ plaintext index is sufficient.
 
 The installer is a single-purpose program that runs as init on the installer
 floppy. It owns the console from first boot, maintains a small state file on the
-floppy to survive multiple reboots gracefully, and creates `/var/elsipkg/` on
+floppy to survive multiple reboots gracefully, and creates `/var/elsi/` and `/var/elsi/info/` on
 the target before invoking the package manager.
 
 Full installer design — phase state machine, UI assumptions, hardware detection,
@@ -535,15 +539,18 @@ Topics raised but not yet designed:
 
 - **`elsipkg.5` man page** — documents the installed package index format, field
   layout, column positions, status codes, date convention, reserved keywords,
-  the repos file format, and package filename encoding. Section 5 is correct for
-  file format documentation.
-- **Server-side package index format** — each repo's `.idx` file served by the
-  FTP package server needs its own format spec. It shares the line-oriented
-  flat-file philosophy of the installed index but serves a different purpose
-  (discovery vs. tracking). Format not yet designed.
-- **`elsi gc` operation** — compaction of tombstoned (`R`) records from the
-  installed index. Trivial algorithm (read, filter, rewrite) but needs a spec for
-  when it is safe to run and what it reports.
+  the repos file format, the per-repo `.idx` stanza format, the `info/` combined
+  file format, and package filename encoding. Section 5 is correct for file
+  format documentation.
+- **Server-side package index format** — the stanza format (stem / short desc /
+  long desc / md5 / blank line) is outlined in ELSI-pkgmgr-notes.md. Full
+  specification belongs in the `elsipkg.5` man page.
+- **Lock file protocol** — `/var/elsi/lock` prevents concurrent `elsi` runs.
+  ELKS is multi-user; the lock design (create, detect stale lock, release on
+  crash) needs a formal spec before implementation.
+- **`elsi tidy` operation** — compaction of tombstoned (`R`) records and their
+  `info/` files from the installed index. Needs a spec for when it is safe to
+  run, what it reports, and crash recovery during the index rewrite.
 - **Clock reliability heuristic** — the proposed rule (year < 1990 or year > 2040
   → treat as absent) should be reviewed and codified as a named constant in the
   package manager source, not a magic number.
