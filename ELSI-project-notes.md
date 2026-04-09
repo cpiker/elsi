@@ -68,13 +68,19 @@ into a single kernel simultaneously. NIC parameters are runtime-configurable via
 
 ## Target Hardware Platforms
 
+ELSI targets IA-16 hardware — 8086, 8088, NEC V20/V30, 80186, 80188, and 80286
+class machines. The 386 and above are out of scope as test targets, though ELKS
+itself may run on them. When describing the target in documentation and code
+comments, use "IA-16 hardware" rather than "8088" or other specific CPU names.
+ELSI is a 16-bit distribution.
+
 ELSI targets two parallel hardware platforms, sharing as much userspace
 infrastructure as possible:
 
 ### Platform 1: IBM PC Compatible (ibmpc)
 
 - IBM PC, PC/XT, PC/AT and compatible clones
-- Covers 8088, 8086, NEC V20/V30 drop-in upgrades, 80286, 80386+ in real mode
+- Covers 8088, 8086, NEC V20/V30 drop-in upgrades, 80286
 - All use `CONFIG_ARCH_IBMPC` in ELKS
 - One fat kernel covers this entire class
 - Target era: original IBM PC (1981) through approximately 1995
@@ -160,7 +166,7 @@ A minimal package manager for ELSI would:
 
 - Define a package as a tarball (see Package Format discussion below) with a
   sidecar manifest
-- Provide install / remove / list / verify operations
+- Provide install / remove / list / search / info operations
 - Track installed packages in the installed package index (see below)
 - Share the same package format across ibmpc and pc98 platforms where binaries
   are compatible
@@ -169,6 +175,9 @@ Think early Slackware, not apt. The goal is "works reliably on 640K" not
 "elegant dependency resolution." Debian `.deb` format was considered and rejected —
 the format itself is lightweight but `dpkg` is not, and ELSI's dependency model
 is too simple to justify the tooling weight.
+
+Full package manager design — command line interface, index formats, repository
+handling — is documented in ELSI-pkgmgr-notes.md.
 
 ### Package Format
 
@@ -215,7 +224,7 @@ It is not yet determined whether packages should be gzip-compressed tarballs
 (.TGZ) or plain uncompressed tarballs (.TAR). The tradeoff is:
 
 - **Gzip**: smaller on disk and smaller to transfer over NIC, but decompression
-  consumes CPU cycles on an 8088 that has none to spare
+  consumes CPU cycles on IA-16 hardware that has none to spare
 - **Plain tar**: larger transfer size but trivial to unpack; may be faster
   end-to-end on slow NIC or SLIP connections where CPU is the bottleneck
 
@@ -223,6 +232,10 @@ It is not yet determined whether packages should be gzip-compressed tarballs
 package both ways, transfer over a simulated SLIP link and a NE2K NIC, and compare
 wall-clock install time. The answer may differ between NIC and SLIP paths, which
 would complicate the format decision.
+
+Tarball caching on the target machine is explicitly out of scope for rev 0.1.
+Tarballs are fetched, unpacked, and discarded. Only the per-repo index files are
+cached locally (see Filesystem Paths).
 
 ### Package Integrity
 
@@ -234,13 +247,13 @@ this use case — computationally cheap, fits the era, not being used for securi
 ## Installed Package Index
 
 The installed package index is ELSI's runtime record of what is on the system.
-It lives at `/var/elsipkg/installed` (see Filesystem Paths below).
+It lives at `/var/elsipkg/instpkgs.idx` (see Filesystem Paths below).
 
 ### Design Principles
 
 The index is a fixed-width, line-oriented flat text file. JSON was considered and
-explicitly rejected — parsing JSON in a small C binary on an 8088 is painful and
-the format offers nothing that a well-designed flat file does not. The index is
+explicitly rejected — parsing JSON in a small C binary on IA-16 hardware is painful
+and the format offers nothing that a well-designed flat file does not. The index is
 human-readable and human-editable by design. Hand-editing is not the primary
 interaction style but is explicitly not prevented.
 
@@ -320,23 +333,16 @@ Format `YYYYMMDD`. Written on install, removal, or any status change. `********`
 when the system clock was unavailable or untrusted at the time of action, or when
 no action has yet been taken (status `N`).
 
-Not guaranteed reliable on all hardware. RTC availability varies widely on XT-class
-machines (see Clock Reliability below). Last Act is informational; do not use it
-for dependency or ordering decisions.
+Not guaranteed reliable on all hardware. RTC availability varies widely on IA-16
+class machines (see Clock Reliability below). Last Act is informational; do not
+use it for dependency or ordering decisions.
 
 ### Repository File
 
-`/var/elsipkg/repos` maps source tags to FTP URLs, one entry per line,
-space-separated:
-
-```
-home  ftp://192.168.118.3
-elsi  ftp://elsi.example.org
-```
-
-The tag in the left column must match exactly the Source field in the package
-index, including space-padding to 5 characters when used in the index. The repos
-file itself uses the short tag without padding for readability.
+`/var/elsipkg/repos` defines the package repositories available to the package
+manager. It uses INI-style format: one named section per repository, with keyword
+lines underneath. See ELSI-pkgmgr-notes.md for the full format specification and
+a sample file.
 
 ### Man Page
 
@@ -348,7 +354,7 @@ format, and the package filename encoding/decoding scheme.
 
 ---
 
-## Clock Reliability on XT-Class Hardware
+## Clock Reliability on IA-16 Hardware
 
 Wall-clock time is unreliable on a significant fraction of ELSI target machines.
 This is not just a Y2K concern — it is a hardware reality.
@@ -385,15 +391,25 @@ ELSI-specific runtime state (cache, logs, etc.) without touching `/etc`.
 ELSI filesystem paths:
 
 ```
-/var/elsipkg/installed     ← installed package index
-/var/elsipkg/repos         ← repository list
+/var/elsipkg/instpkgs.idx  ← installed package index
+/var/elsipkg/repos         ← repository definitions (INI format)
+/var/elsipkg/<name>.idx    ← per-repo cached package index (e.g. elsi.idx, home.idx)
 /var/hardware              ← hardware detection report (installer-generated)
 ```
+
+Notes on the `.idx` extension: it is used for index files because it describes
+function (this is an index) rather than format encoding. It follows the same
+reasoning as `.list` and `.md5sums` in Debian's dpkg — extensions that describe
+what the file *is*, not how it is internally structured. The `repos` file carries
+no extension, consistent with Linux convention for human-edited configuration
+files (cf. `fstab`, `passwd`, `hosts`).
+
+Tarball caching is out of scope for rev 0.1. The `/var/elsipkg/` directory
+contains no package tarballs — only index files and the repository definition.
 
 Future paths (not yet designed):
 
 ```
-/var/elsipkg/cache/        ← downloaded packages awaiting install
 /var/elsipkg/log           ← install/remove history log
 ```
 
@@ -507,7 +523,7 @@ computing community that ELSI hopes to attract.
   a measurable impact on kernel or userspace image size? Quantify before committing
   to the 720KB floppy target for pc98.
 - **RESEARCH NEEDED**: Is plain `.tar` faster than `.tgz` for package installation
-  on 8088-class hardware? Measure wall-clock install time over both NIC and SLIP
+  on IA-16 hardware? Measure wall-clock install time over both NIC and SLIP
   paths for a representative package in both formats. CPU cost of decompression
   may exceed transfer-time savings on slow connections.
 
@@ -521,10 +537,10 @@ Topics raised but not yet designed:
   layout, column positions, status codes, date convention, reserved keywords,
   the repos file format, and package filename encoding. Section 5 is correct for
   file format documentation.
-- **Server-side package index format** — the index file served by the FTP package
-  server needs its own format spec. It shares the line-oriented flat-file philosophy
-  of the installed index but serves a different purpose (discovery vs. tracking).
-  Format not yet designed.
+- **Server-side package index format** — each repo's `.idx` file served by the
+  FTP package server needs its own format spec. It shares the line-oriented
+  flat-file philosophy of the installed index but serves a different purpose
+  (discovery vs. tracking). Format not yet designed.
 - **`elsi gc` operation** — compaction of tombstoned (`R`) records from the
   installed index. Trivial algorithm (read, filter, rewrite) but needs a spec for
   when it is safe to run and what it reports.
