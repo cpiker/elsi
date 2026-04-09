@@ -396,19 +396,19 @@ ELSI filesystem paths:
 /var/elsi/repos            ← repository definitions (INI format)
 /var/elsi/<tag>.idx        ← per-repo cached package index (e.g. elsi.idx, home.idx)
 /var/elsi/lock             ← package manager lock file (prevents concurrent elsi runs)
-/var/elsi/info/<stem>      ← per-package info file: description + file list
+/var/elsi/instpkgs/<stem>      ← per-package info file: description + file list
 ```
 Notes on the `.idx` extension: it is used for index files because it describes
 function (this is an index) rather than format encoding. It follows the same
 reasoning as `.list` and `.md5sums` in Debian's dpkg — extensions that describe
 what the file *is*, not how it is internally structured. The `repos` file carries
 no extension, consistent with Linux convention for human-edited configuration
-files (cf. `fstab`, `passwd`, `hosts`). Info files under `info/` carry no
+files (cf. `fstab`, `passwd`, `hosts`). Info files under `instpkgs/` carry no
 extension — the directory context makes their purpose clear.
 
 Tarball caching is out of scope for rev 0.1. The `/var/elsi/` directory
 contains no package tarballs — only index files, the repository definition,
-the lock file, and the `info/` tree.
+the lock file, and the `instpkgs/` tree.
 
 Future paths (not yet designed):
 
@@ -419,7 +419,7 @@ Future paths (not yet designed):
 The package manager must fail with a clear, actionable error message if
 `/var/elsi/` does not exist. It must not silently create files elsewhere or
 produce cryptic errors. The installer is responsible for creating `/var/elsi/`
-and `/var/elsi/info/` during first-time setup; the package manager is not
+and `/var/elsi/instpkgs/` during first-time setup; the package manager is not
 responsible for creating them.
 
 ---
@@ -439,7 +439,7 @@ plaintext index is sufficient.
 
 The installer is a single-purpose program that runs as init on the installer
 floppy. It owns the console from first boot, maintains a small state file on the
-floppy to survive multiple reboots gracefully, and creates `/var/elsi/` and `/var/elsi/info/` on
+floppy to survive multiple reboots gracefully, and creates `/var/elsi/` and `/var/elsi/instpkgs/` on
 the target before invoking the package manager.
 
 Full installer design — phase state machine, UI assumptions, hardware detection,
@@ -539,7 +539,7 @@ Topics raised but not yet designed:
 
 - **`elsipkg.5` man page** — documents the installed package index format, field
   layout, column positions, status codes, date convention, reserved keywords,
-  the repos file format, the per-repo `.idx` stanza format, the `info/` combined
+  the repos file format, the per-repo `.idx` stanza format, the `instpkgs/` combined
   file format, and package filename encoding. Section 5 is correct for file
   format documentation.
 - **Server-side package index format** — the stanza format (stem / short desc /
@@ -549,7 +549,7 @@ Topics raised but not yet designed:
   ELKS is multi-user; the lock design (create, detect stale lock, release on
   crash) needs a formal spec before implementation.
 - **`elsi tidy` operation** — compaction of tombstoned (`R`) records and their
-  `info/` files from the installed index. Needs a spec for when it is safe to
+  `instpkgs/` files from the installed index. Needs a spec for when it is safe to
   run, what it reports, and crash recovery during the index rewrite.
 - **Clock reliability heuristic** — the proposed rule (year < 1990 or year > 2040
   → treat as absent) should be reviewed and codified as a named constant in the

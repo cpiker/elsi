@@ -70,10 +70,10 @@ more than one repo.
 /var/elsi/repos            ← repository definitions (INI format, human-edited)
 /var/elsi/<tag>.idx        ← per-repo cached package index (e.g. elsi.idx, home.idx)
 /var/elsi/lock             ← package manager lock file (prevents concurrent elsi runs)
-/var/elsi/info/<stem>      ← per-package info file: description + file list
+/var/elsi/instpkgs/<stem>      ← per-package info file: description + file list
 ```
 
-The `info/` subdirectory holds one file per installed package, extracted from
+The `instpkgs/` subdirectory holds one file per installed package, extracted from
 the package tarball at install time. Each file combines the full package
 description and the list of files written to the filesystem, separated by a
 `---` delimiter:
@@ -98,13 +98,13 @@ status `N` (needed, not yet fetched) has no info file — its description is
 served from the cached repo index until install time.
 
 The `lock` file is created at the start of any operation that modifies
-`instpkgs.idx` or the `info/` tree, and removed on clean exit. Its presence
+`instpkgs.idx` or the `instpkgs/` tree, and removed on clean exit. Its presence
 prevents concurrent `elsi` invocations from corrupting the index. ELKS is
 multi-user; concurrent package operations are a real risk.
 
 The package manager must fail with a clear, actionable error if `/var/elsi/`
 does not exist. It must not silently create the directory or produce cryptic
-errors. Creating `/var/elsi/` and `/var/elsi/info/` is the installer's
+errors. Creating `/var/elsi/` and `/var/elsi/instpkgs/` is the installer's
 responsibility.
 
 Tarball caching is explicitly out of scope for rev 0.1. Packages are fetched,
@@ -238,7 +238,7 @@ Key properties:
 - Removal flips status to `R` rather than deleting the record — single byte write
 - Compaction via `elsi tidy` is a separate explicit operation
 - A file of only `N` records is a valid install queue — hand-editing is supported
-- Each installed package has a corresponding `info/<stem>` file (description +
+- Each installed package has a corresponding `instpkgs/<stem>` file (description +
   file list); retained through `R` status, removed by `elsi tidy`
 
 ---
@@ -249,7 +249,7 @@ Key properties:
   descriptions and connectivity status. Not yet designed.
 - **`elsi tidy` specification** — when is it safe to run, what does it report,
   does it require the system to be quiescent? Must also remove the corresponding
-  `info/<stem>` file when compacting a tombstoned record.
+  `instpkgs/<stem>` file when compacting a tombstoned record.
 - **`elsi tidy` and the lock file** — `elsi tidy` rewrites `instpkgs.idx` in full
   (read, filter, rewrite). It must hold the lock for the entire rewrite. Specify
   crash recovery: if the process dies mid-rewrite, is the index recoverable?
@@ -257,7 +257,7 @@ Key properties:
   in multiple repos or in both platform variants needs a fully specified
   algorithm, not just the outline above.
 - **`elsipkg.5` man page** — the authoritative format reference for
-  `instpkgs.idx`, `repos`, the per-repo `.idx` stanza format, and the `info/`
+  `instpkgs.idx`, `repos`, the per-repo `.idx` stanza format, and the `instpkgs/`
   file format. Section 5 is correct for file format documentation.
 
 ---
