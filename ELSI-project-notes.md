@@ -388,6 +388,29 @@ be calm and informational, not an error.
 
 ---
 
+## Filesystem Choice
+
+ELKS supports both Minix and FAT-16 filesystems on the installed system, and
+ELSI supports both. FAT-16 works correctly under ELKS and is a reasonable choice,
+particularly for users coming from a FreeDOS or DOS background who want the target
+disk to remain accessible from DOS tools.
+
+Two conventions follow from this:
+
+- **Do not assume Minix in ELSI code or documentation.** Any logic or
+  documentation that requires a specific filesystem must state that requirement
+  explicitly and justify it. Implicit Minix assumptions are bugs.
+- **Encourage Minix to end users.** The installer should present Minix as the
+  recommended default, with a brief note that it preserves Unix file permissions
+  and ownership. Users who prefer FAT-16 can select it without friction. The
+  recommendation exists to nudge new users toward a more Unix-like experience;
+  it is not a restriction.
+
+The installer floppy itself is FAT-12. This is not a choice — it is a requirement
+for compatibility with the BIOS boot process and standard floppy tooling.
+
+---
+
 ## Filesystem Paths
 
 ELKS has a compact directory tree compared to a full Linux system. The standard
