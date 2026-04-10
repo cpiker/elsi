@@ -262,10 +262,9 @@ The file also serves as a valid worklist format: a file containing only `N`
 a single command to bring the system into sync with the edited list. This
 interaction style is supported, not just tolerated.
 
-Fixed-width records (80 bytes including newline) allow direct seeks by record
-number and are friendly to 80-column editors. ELKS ships two editors: `edit`
-(the Minix full-screen editor, faster on constrained hardware) and `kilo`. Both
-handle 80-column files naturally.
+Fixed-width records (128 bytes including newline) allow direct seeks by record
+number. The wider record accommodates a human-readable Name field alongside the
+machine-facing Filename stem, with room for a useful Description.
 
 Removed packages are not deleted from the index immediately. Instead the status
 byte is flipped to `R` (tombstone) and the record is retained. This makes removal
@@ -276,13 +275,13 @@ hardware. Compaction is a separate explicit operation (`elsi tidy`).
 
 ```
 ELSI Installed Package Index v1
-Fixed with 80-byte records including the newline. Package list begins on row 6.
+Fixed-width 128-byte records including the newline. Package list begins on row 6.
 See man elsipkg.5 for more information
-S|Name    |Source|Description                                         |Last Act
--|--------|------|----------------------------------------------------|--------
-I|sh___X10|home  |Bourne-compatible shell version 1.0                 |20260407
-N|basicP11|elsi  |PC-98 Basic interpreter                             |********
-R|man5_N0K|LOCAL |File formats man pages, 0.20 test version only!     |20260401
+S|Name                    |Filename|Src     |LastAct |Description                                                              
+-|------------------------|--------|--------|--------|-------------------------------------------------------------------------
+I|ash                     |ash__X10|home    |20260407|Bourne-compatible shell (installed as /bin/sh)                           
+N|basic                   |basicP11|elsi    |********|PC-98 BASIC interpreter                                                  
+R|elsipkg                 |man5_N0K|LOCAL   |20260401|File formats man pages, 0.20 test version only!                          
 ```
 
 ### Field Definitions
@@ -296,47 +295,58 @@ R|man5_N0K|LOCAL |File formats man pages, 0.20 test version only!     |20260401
 | `N` | Needed — queued for install, no action taken yet |
 | `U` | Update available |
 
-A record with status `N` must always have `********` in the Last Act field. If a
+A record with status `N` must always have `********` in the LastAct field. If a
 `N` record has a date, the index is inconsistent and the package manager should
 warn.
 
-**Name — Package filename stem (columns 3–10, 8 characters)**
+**Name — Human-readable package name (columns 3–26, 24 characters, space-padded)**
 
-The 8.3 package filename stem without the `.TGZ` extension, space-padded on the
-right. Encodes package name, platform code, and version per the package filename
-convention above. This is the primary key for the index — all lookups start here.
-See `elsipkg.5` for decoding.
+The human-facing package name used on the command line and in `elsi search`,
+`elsi info`, and `elsi list` output. This is the name users type. Not constrained
+to 8.3 — may contain hyphens and may be longer than the 5-character filename stem
+prefix. Space-padded on the right. Examples: `nslookup`, `elks-viewer`, `mbrpatch`.
 
-**Source — Repository tag (columns 12–16, 5 characters, left-aligned,
-space-padded)**
+The package manager also accepts the 5-character stem prefix for scripting
+convenience, but Name is the preferred user-facing argument for all `elsi` commands.
 
-A short tag referencing an entry in `/var/elsi/repos`. One keyword is reserved
-and may not be used as a repo name:
+**Filename — Package filename stem (columns 28–35, 8 characters, space-padded)**
+
+The 8.3 package filename stem without the `.TGZ` extension. Encodes the 5-character
+package name prefix, platform code, and two-digit version per the package filename
+convention above. This is the primary key for the index — all internal lookups,
+file fetches, and `instpkgs/` file references use the stem. See `elsipkg.5` for
+decoding.
+
+**Src — Repository name (columns 37–44, 8 characters, left-aligned, space-padded)**
+
+The name of the repository this package was installed from, referencing an entry
+in `/var/elsi/repos`. The field is 8 characters wide for the same reason repo names are constrained to 8 characters: both must fit
+here without truncation. Two keywords are reserved and may not be used as repo names:
 
 | Keyword | Meaning |
 |---------|---------|
 | `LOCAL` | Installed directly from a file on local disk, not from any repository |
-| `CHEAT` | Asserted present by sysadmin via `elsi assume`. Nothing was installed. |
+| `CHEAT` | Reserved |
 
-Repository tags are user-defined 1–5 character strings. The installer may create
-a default repo entry named `elsi` pointing at a canonical mirror, but `elsi` is
-not a reserved word — it is just a conventional choice.
+Repository tags are user-defined strings up to 8 characters. The installer may
+create a default repo entry named `elsi` pointing at a canonical mirror, but `elsi`
+is not a reserved word — it is just a conventional choice.
 
-**Description — Free text (columns 18–69, 52 characters, space-padded)**
-
-Human-readable label. May include version notes or warnings at the author's
-discretion. Not parsed by the package manager. The description in the index is
-a short label; full package descriptions live in the package manifest.
-
-**Last Act — Date of last action (columns 71–78, 8 characters)**
+**LastAct — Date of last action (columns 46–53, 8 characters)**
 
 Format `YYYYMMDD`. Written on install, removal, or any status change. `********`
 when the system clock was unavailable or untrusted at the time of action, or when
 no action has yet been taken (status `N`).
 
 Not guaranteed reliable on all hardware. RTC availability varies widely on IA-16
-class machines (see Clock Reliability below). Last Act is informational; do not
+class machines (see Clock Reliability below). LastAct is informational; do not
 use it for dependency or ordering decisions.
+
+**Description — Free text (columns 55–127, 73 characters, space-padded)**
+
+Human-readable label. May include version notes or warnings at the author's
+discretion. Not parsed by the package manager. The description in the index is
+a short label; full package descriptions live in the package manifest.
 
 ### Repository File
 
@@ -351,8 +361,7 @@ A `elsipkg.5` man page is needed. Section 5 is the correct section for file
 format documentation (per Unix convention: "File formats and conventions",
 canonical example `/etc/passwd`). The man page should document field layout,
 column positions, reserved keywords, status codes, date format, the repos file
-format, the package filename encoding/decoding scheme, and the `CHEAT` source
-tag and its associated `elsi assume` command.
+format, and the package filename encoding/decoding scheme.
 
 ---
 
@@ -370,7 +379,7 @@ Tick timing (elapsed time, relative intervals) remains reliable even when the RT
 is absent or wrong. Absolute wall-clock time is not.
 
 **Proposed heuristic for the package manager:** treat the RTC as absent if the
-reported year is before 1990 or after 2040. Write `********` to Last Act and emit
+reported year is before 1990 or after 2040. Write `********` to LastAct and emit
 a warning to the user. Do not fail the operation — the package install or removal
 should proceed regardless.
 
@@ -396,7 +405,7 @@ ELSI filesystem paths:
 /var/hwreport              ← hardware detection report (installer-generated)
 /var/elsi/instpkgs.idx     ← installed package index
 /var/elsi/repos            ← repository definitions (INI format)
-/var/elsi/<tag>.idx        ← per-repo cached package index (e.g. elsi.idx, home.idx)
+/var/elsi/<reponame>.idx   ← per-repo cached package index (e.g. elsi.idx, home.idx)
 /var/elsi/lock             ← package manager lock file (prevents concurrent elsi runs)
 /var/elsi/instpkgs/<stem>      ← per-package info file: description + file list
 ```
@@ -532,11 +541,6 @@ computing community that ELSI hopes to attract.
   on IA-16 hardware? Measure wall-clock install time over both NIC and SLIP
   paths for a representative package in both formats. CPU cost of decompression
   may exceed transfer-time savings on slow connections.
-- **RESEARCH NEEDED**: Count the full set of packages that would constitute an
-  ELSI 0.1 release by surveying the current ELKS userspace. The total package
-  count and the shape of the dependency graph affect worklist sizing assumptions
-  in the package manager and the plausibility of claims about dependency graph
-  depth. Do this before implementation begins.
 
 ---
 
@@ -545,10 +549,10 @@ computing community that ELSI hopes to attract.
 Topics raised but not yet designed:
 
 - **`elsipkg.5` man page** — documents the installed package index format, field
-  layout, column positions, status codes, date convention, reserved keywords
-  (including `LOCAL` and `CHEAT`), the repos file format, the per-repo `.idx`
-  stanza format, the `instpkgs/` combined file format, and package filename
-  encoding. Section 5 is correct for file format documentation.
+  layout, column positions, status codes, date convention, reserved keywords,
+  the repos file format, the per-repo `.idx` stanza format, the `instpkgs/` combined
+  file format, and package filename encoding. Section 5 is correct for file
+  format documentation.
 - **Server-side package index format** — the stanza format (stem / short desc /
   long desc / md5 / blank line) is outlined in ELSI-pkgmgr-notes.md. Full
   specification belongs in the `elsipkg.5` man page.

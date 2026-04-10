@@ -23,173 +23,45 @@ The following session illustrates the intended command line behaviour:
 
 ```sh
 $ elsi search battletech sheet
-mechb10x - 3025 battletech mech record sheet generator
+mechb  mech-recorder  3025 battletech mech record sheet generator
 
-$ elsi info mechb
-mechb - 3025 battletech mech record sheet generator
+$ elsi info mech-recorder
+mech-recorder - 3025 battletech mech record sheet generator
 Use this program to design legal battletech record sheets and print them out on
 a dot-matrix printer. All mech-mountable equipment for the 3025 era is supported.
 
-$ elsi install mechb
-btech requires the following packages:
-   luacu [luacuX01] - LUA Curses Interface extra small for ELKS
-   lua   [lua__X51] - LUA Interpreter
-Install these as well? (y/n)
+$ elsi install mech-recorder
+package mech-recorder installed
 
-package luacu installed
-package lua__ installed
-package mechb10x installed
-mechb
-
-$ elsi remove mechb
-
-$ elsi assume luacuX01
-luacu marked as assumed present.
+$ elsi remove mech-recorder
 ```
 
-### Short Name Resolution
+### Name Resolution
 
-The full package identifier is the 8-character filename stem (`mechb10x`).
-Commands also accept the 5-character package name prefix (`mechb`), which the
-package manager resolves to the full stem. If a short name is ambiguous — for
-example, `mechb` matching both `mechbX10` and `mechbP10` — the package manager
-prefers the entry matching the current platform and warns if a cross-platform
-match was used.
+The preferred user-facing identifier is the Name field — the human-readable
+package name stored in `instpkgs.idx` and the cached repo indexes (e.g.
+`mech-recorder`, `nslookup`, `elks-viewer`). This is what users type and what
+`elsi search` and `elsi list` display.
 
-If a short name matches entries in multiple repositories, the repository listed
-first in `repos` wins. A warning is emitted if the same package name appears in
-more than one repo.
+Commands also accept the 5-character filename stem prefix (e.g. `mechb`, `nslk_`),
+which the package manager resolves to the full 8-character Filename stem. This
+form is useful in scripts. If a stem prefix is ambiguous — matching both
+`mechbX10` and `mechbP10` — the package manager prefers the entry matching the
+current platform and warns if a cross-platform match was used.
+
+If a Name or stem prefix matches entries in multiple repositories, the repository
+listed first in `repos` wins. A warning is emitted if the same package name
+appears in more than one repo.
 
 ### Planned Commands (rev 0.1)
 
 - `elsi search <terms>` — search package descriptions across all cached repo indexes
 - `elsi info <name>` — show full description for a package (installed or available)
-- `elsi install <name>` — fetch and install a package, resolving dependencies
+- `elsi install <name>` — fetch and install a package from a repository
 - `elsi remove <name>` — remove an installed package (tombstone in index)
-- `elsi assume <stem>` — assert that a package is present without installing it
 - `elsi list` — list installed packages
 - `elsi update` — refresh all cached repo index files from their FTP sources
 - `elsi tidy` — compact tombstoned records from the installed index
-
----
-
-## Dependency Resolution
-
-### Transitive Resolution
-
-`elsi install` resolves the full transitive dependency set before fetching
-anything. If package A requires B, and B requires C, all three are resolved
-before the user is prompted or any network activity begins.
-
-Resolution uses an iterative worklist algorithm, not recursion. Recursion is
-the wrong tool for graph walking on any platform, and is particularly
-inadvisable on IA-16 hardware where the default process stack is 2KB. The
-worklist approach:
-
-1. Seed the worklist with the direct dependencies of the requested package.
-2. Pull one entry from the worklist.
-3. If already installed or already in the resolved set, skip it.
-4. Otherwise add it to the resolved set and push its dependencies onto the
-   worklist.
-5. Repeat until the worklist is empty.
-
-This naturally handles diamond dependencies (A requires B and C; B also
-requires C — C appears once in the resolved set) without special-casing.
-
-The worklist is a fixed-size array. For a package set of realistic ELSI size,
-this is never a constraint in practice, but if the worklist overflows the
-implementation must fail with a clear message rather than silently producing
-an incomplete dependency set.
-
-### Missing Package Handling
-
-The full resolution pass completes before any error is reported. If multiple
-dependencies are unsatisfiable, all are collected and reported together in a
-single error message. The install does not proceed.
-
-```
-Cannot install btech: the following required packages are not available
-in any configured repository:
-   luacu
-   lua
-```
-
-This is friendlier than failing on the first missing package and forcing the
-user to iterate.
-
-### Dependency Prompt
-
-When dependencies beyond the requested package must be installed, the user is
-shown the full set and asked to confirm:
-
-```
-btech requires the following packages:
-   luacu [luacuX01] - LUA Curses Interface extra small for ELKS
-   lua   [lua__X51] - LUA Interpreter
-Install these as well? (y/n)
-```
-
-The display shows the short name, the resolved package stem in brackets, and
-the short description from the repo index. Repository source is not shown
-unless the same package name appears in multiple repos, in which case the
-winning repo is noted.
-
-The `?` option (per-package confirmation loop) is reserved for a future
-revision. It is not implemented in rev 0.1 but the prompt should use `(y/n)`
-phrasing that does not preclude adding `?` later.
-
-### CHEAT Packages and Dependency Satisfaction
-
-A package with source field `CHEAT` (see *elsi assume* below) is treated as
-satisfying any dependency on that package name. The package manager does not
-warn at dependency-check time about assumed packages — the sysadmin has already
-made their assertion.
-
----
-
-## elsi assume
-
-`elsi assume <stem>` records a package as present in `instpkgs.idx` without
-fetching or installing anything. It is the sysadmin's assertion that the
-package exists — useful when a binary has been installed by hand, copied
-directly, or is known to be present from a source outside ELSI's knowledge.
-
-The resulting index record has:
-
-- Status `I` (installed — it is being asserted as present)
-- Source field `CHEAT`
-- Last Act `********` (no reliable install time)
-
-The info file for an assumed package contains:
-
-```
-This package was not installed by elsi.
-The sysadmin asserted it exists. elsi took their word for it.
----
-```
-
-No file list follows the delimiter. `elsi remove` on a CHEAT package therefore
-has no files to delete from the filesystem. It prompts:
-
-```
-luacu was asserted, not installed. No files will be removed.
-Remove the record? (y/n)
-```
-
-The source tag `CHEAT` is an internal identifier. It appears in `instpkgs.idx`
-and is documented in `elsipkg.5`. It does not appear in user-facing prompts or
-error messages, which use the word "asserted" or "assumed" instead. Finding
-`CHEAT` in the index or the man page is left as a small reward for the curious.
-
-### Reserved Source Tags
-
-The following source tags are reserved in `instpkgs.idx` and must not be used
-as repository names in `repos`:
-
-| Tag   | Meaning |
-|-------|---------|
-| `LOCAL` | Installed directly from a file on local disk, not from a repository |
-| `CHEAT` | Asserted present by sysadmin via `elsi assume`. Nothing was installed. |
 
 ---
 
@@ -199,9 +71,9 @@ as repository names in `repos`:
 /var/hwreport              ← hardware detection report (installer-generated)
 /var/elsi/instpkgs.idx     ← installed package index
 /var/elsi/repos            ← repository definitions (INI format, human-edited)
-/var/elsi/<tag>.idx        ← per-repo cached package index (e.g. elsi.idx, home.idx)
+/var/elsi/<reponame>.idx   ← per-repo cached package index (e.g. elsi.idx, home.idx)
 /var/elsi/lock             ← package manager lock file (prevents concurrent elsi runs)
-/var/elsi/instpkgs/<stem>  ← per-package info file: description + file list
+/var/elsi/instpkgs/<stem>      ← per-package info file: description + file list
 ```
 
 The `instpkgs/` subdirectory holds one file per installed package, extracted from
@@ -226,8 +98,7 @@ extension — the directory context makes their purpose clear.
 Info files are retained through tombstone (`R`) status and deleted only when
 `elsi tidy` compacts the record out of the installed index. A package with
 status `N` (needed, not yet fetched) has no info file — its description is
-served from the cached repo index until install time. A CHEAT package has an
-info file but no file list.
+served from the cached repo index until install time.
 
 The `lock` file is created at the start of any operation that modifies
 `instpkgs.idx` or the `instpkgs/` tree, and removed on clean exit. Its presence
@@ -254,9 +125,9 @@ manager. It uses INI-style format.
 ```
 # ELSI Repository Definitions
 #
-# Repo names must be 5 characters or fewer.
-# They appear in the package index and must fit the Source field.
-# Examples: elsi  home  local  nasa  cern
+# Repo names must be 8 characters or fewer.
+# They appear in the Src field of the package index and must fit within it.
+# Examples: elsi  home  local  nasa  cern  myrepo
 #
 # Repositories are searched in the order they appear in this file.
 # To change search priority, reorder the repository blocks.
@@ -282,9 +153,12 @@ ftp   192.168.1.10
 
 ### Design Notes
 
-- Section headers (`[reponame]`) name the repository. The name must be 1–5
-  characters. It becomes the Source field tag in `instpkgs.idx` and the stem
-  of the cached index file (`<tag>.idx`).
+- Section headers (`[reponame]`) name the repository. The name must be 1–8
+  characters. It appears as the Src field value in `instpkgs.idx` and as the
+  stem of the cached index file (`<reponame>.idx`). The 8-character limit
+  matches the width of the Src field — a repo name that doesn't fit in the
+  index is not a valid repo name. Repo index filenames (`<reponame>.idx`) are
+  legal 8.3 filenames for any repo name up to 8 characters.
 - `ftp` is a transport keyword, not a URL scheme. It tells the package manager
   which protocol to use. The address that follows is a bare hostname or IP.
   Raw IP addresses are always valid; hostnames require DNS resolution to be
@@ -302,16 +176,22 @@ ftp   192.168.1.10
   To change priority, reorder the sections. There is no `priority` keyword —
   position in the file is the priority.
 - The comment block at the top of the installer-generated `repos` file is
-  intentional. It documents the 5-character name limit and keyword syntax
+  intentional. It documents the 8-character name limit and keyword syntax
   inline, where a user will see it when they open the file to add a repo.
   Not everyone reads man pages before editing a config file.
 
+### Reserved Source Tag
+
+The tag `LOCAL` (uppercase) is reserved in `instpkgs.idx` to indicate a package
+installed directly from a local file rather than from any repository. It must
+not be used as a repository name in `repos`.
+
 ---
 
-## Per-Repo Index Files: `<tag>.idx`
+## Per-Repo Index Files: `<reponame>.idx`
 
 Each repository has a cached copy of its server-side package index, stored at
-`/var/elsi/<tag>.idx`. These files are fetched from the FTP server by
+`/var/elsi/<reponame>.idx`. These files are fetched from the FTP server by
 `elsi update` and are the source of truth for `elsi search` and `elsi info`
 on packages not yet installed.
 
@@ -359,14 +239,14 @@ ELSI-project-notes.md under "Installed Package Index" and will be formally
 specified in the `elsipkg.5` man page.
 
 Key properties:
-- Fixed-width records, 80 bytes including newline
+- Fixed-width records, 128 bytes including newline
+- Name field (24 chars) is the human-facing identifier; Filename stem (8 chars) is the internal primary key
 - Status field supports `I` (installed), `R` (tombstone), `N` (needed), `U` (update)
 - Removal flips status to `R` rather than deleting the record — single byte write
 - Compaction via `elsi tidy` is a separate explicit operation
 - A file of only `N` records is a valid install queue — hand-editing is supported
 - Each installed package has a corresponding `instpkgs/<stem>` file (description +
   file list); retained through `R` status, removed by `elsi tidy`
-- CHEAT packages have an info file with no file list section
 
 ---
 
@@ -385,12 +265,7 @@ Key properties:
   algorithm, not just the outline above.
 - **`elsipkg.5` man page** — the authoritative format reference for
   `instpkgs.idx`, `repos`, the per-repo `.idx` stanza format, and the `instpkgs/`
-  file format. Section 5 is correct for file format documentation. Must document
-  the `CHEAT` source tag and the `elsi assume` command.
-- **Initial package count** — the total number of packages in an ELSI 0.1
-  release needs to be counted against the current ELKS userspace to verify
-  that worklist sizing assumptions hold and that dependency graphs are as
-  shallow as expected. This should be done before implementation begins.
+  file format. Section 5 is correct for file format documentation.
 
 ---
 

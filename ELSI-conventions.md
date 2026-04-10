@@ -32,20 +32,6 @@ targets.
 
 ---
 
-## Hardware Constraints Philosophy
-
-ELSI accepts hardware limitations only when lack of creativity or sheer
-combinatorics make them unavoidable — not before. Running on a 4.77 MHz 8088
-with 640K of RAM is a constraint; writing lazy algorithms because the hardware
-is old is a choice. Make the right choice.
-
-Applied in practice: if a problem has a correct solution that works within the
-hardware envelope, use it. If it does not, document why not and what the
-trade-off is. "It's an XT" is not a justification for sloppy design; it is a
-prompt to be creative.
-
----
-
 ## Data Formats
 
 - **Line-oriented flat files, not JSON.** JSON was considered and explicitly
@@ -56,9 +42,8 @@ prompt to be creative.
 - **Human-readable and human-editable by design.** Hand-editing is not the
   primary interaction style but is explicitly not prevented.
 - **Fixed-width records where seeking matters.** The installed package index
-  uses 80-byte fixed-width records to allow direct seeks and to be friendly to
-  80-column editors. Apply the same principle elsewhere if random access is
-  needed.
+  uses 128-byte fixed-width records to allow direct seeks by record number.
+  Apply the same principle elsewhere if random access is needed.
 - **INI-style format for human-edited configuration files.** The `repos` file
   uses INI-style named sections with keyword lines. This format was chosen for
   its simplicity, human-editability, and natural support for `#` comments.
@@ -84,8 +69,10 @@ ELSI uses file extensions selectively, following the same reasoning as Linux's
   (`.tab` implies tab-delimited; `.dat` implies binary) or describe format rather
   than function.
 - The 8.3 filename constraint applies to all files that may reside on FAT-12/16
-  filesystems. Package filenames follow the `NNNNNPVV.TGZ` scheme. Index files
-  use the repo tag (1–5 chars) plus `.idx`. All names must fit within 8.3.
+  filesystems. Package filenames follow the `NNNNNPVV.TGZ` scheme. Cached repo
+  index files are named `<reponame>.idx` — since the stem may be up to 8
+  characters, repo names up to 8 characters produce legal 8.3 filenames.
+  All names must fit within 8.3.
 
 ---
 
@@ -122,8 +109,11 @@ per component, tab/indent convention, comment style by domain.*
 - Package filenames follow the 8.3 convention (`NNNNNPVV.TGZ`) for FAT-12/16
   compatibility. See ELSI-project-notes.md for the full encoding scheme.
 - Design documents are named `ELSI-<topic>.md`.
-- Repo tag names are 1–5 characters. They appear as the stem of per-repo index
-  files (`<tag>.idx`) and in the Source field of the installed package index.
+- Repo names are 1–8 characters. The repo name appears in the Src field of
+  `instpkgs.idx` and as the stem of the cached index file (`<reponame>.idx`).
+  Both constraints permit up to 8 characters, so the Src field width is the
+  binding limit. Choose repo names that are meaningful short identifiers:
+  `elsi`, `home`, `local`.
   Choose tags that are meaningful short identifiers: `elsi`, `home`, `local`.
 
 ---

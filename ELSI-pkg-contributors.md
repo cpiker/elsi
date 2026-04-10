@@ -17,10 +17,8 @@ running ELSI systems. See ELSI-project-notes.md for a full description of the
 target platform.
 
 All ELSI binaries are statically linked. There are no shared library
-dependencies to manage at present — if your package delivers a binary, it must
-be a self-contained IA-16 ELF or a.out executable. This simplification holds
-for as long as ELKS lacks shared text segment infrastructure. See *Dependency
-Philosophy* below for the longer-term picture.
+dependencies to manage. If your package delivers a binary, it must be a
+self-contained IA-16 ELF or a.out executable.
 
 ---
 
@@ -107,8 +105,7 @@ version number.
 ## Dependencies
 
 Packages may declare dependencies on other packages. The `elsi` package manager
-resolves the full transitive dependency set at install time and prompts the
-user to install any missing packages automatically.
+checks declared dependencies at install time and warns if they are not satisfied.
 
 ### Declaring Dependencies
 
@@ -116,79 +113,49 @@ Dependencies are declared in the package manifest (see *Package Contents*
 below). The dependency format is:
 
 ```
-requires: <name>
 requires: <name> <major>
-requires: <name> <major>.<minor>
 ```
 
-The package name is the only required field. Version constraints are optional
-and should be added only when the maintainer has verified they matter. The
-guiding principle is: **declare the minimum you actually know.**
-
-Examples:
+This means "any installed version of `<name>` with this major version number
+will satisfy this dependency." For example:
 
 ```
-requires: lua
-requires: lua 5
-requires: lua 5.1
+requires: lua 1
+requires: ash 2
 ```
 
-`requires: lua` means any installed version of lua satisfies this dependency.
-`requires: lua 5` means any lua with major version 5. `requires: lua 5.1` means
-lua 5.1 specifically — use this only when you have tested against that version
-and know earlier minor versions are incompatible.
-
-The package manager reads as many fields as are present. Parsers must silently
-ignore any fields beyond what they understand, so the format remains extensible
-without breaking older tools.
-
-When a bare `requires: lua` is found and lua is not installed, the package
-manager will offer to install the first lua package found by repository priority
-order.
+A package declaring `requires: ash 2` will be satisfied by any installed `ash`
+with major version 2 — whether that is ash 2.0, 2.3, or 2.G. It will not be
+satisfied by ash 1.x or ash 3.x.
 
 ### The 0.x Exception
 
 Dependencies on packages permanently at major=0 should specify both major and
-minor version, since major=0 carries no interface stability promise. Under the
-relaxed dependency model this exception becomes more important, not less:
-a bare `requires: elks` would be nearly meaningless, so packages depending on
-ELKS-version-specific behaviour should be explicit:
+minor version, since major=0 carries no interface stability promise:
 
 ```
 requires: elks 0.9
 ```
 
+This is the one place ELSI dependency declarations diverge from the
+major-version-only rule. When a package you depend on lives at 0.x, the minor
+version is the meaningful interface boundary.
+
 ### Dependency Philosophy
 
-ELSI's dependency model is intentionally simple, with an eye toward what may
-be needed later.
-
-**What is true today:** All ELSI binaries are statically linked. There are no
-shared library dependencies at link time. If your package depends on another
-package, it is because it invokes that package's *commands* at runtime, not
-its libraries at link time. Dependency lists are therefore short — typically
-zero or one entry.
-
-**What may change:** ELKS has latent shared text segment infrastructure dating
-to its early history. If this is ever developed into a first-class facility
-with heterogeneous binaries sharing code segments, the dependency model will
-need revisiting — ABI stability guarantees and more precise version constraints
-would become necessary. ELSI's dependency declaration format is designed to
-accommodate this without a format break: additional constraint fields can be
-added after the version without invalidating existing declarations.
-
-This is not a near-term concern. It is noted so that the format is not
-inadvertently designed into a corner.
-
-**Other properties of the current model:**
+ELSI's dependency model is intentionally simple:
 
 - One version of any package is installed at a time. There is no version
   coexistence.
-- The `elsi` package manager resolves transitive dependencies automatically
-  and prompts the user. It does not silently install without confirmation.
-- If a dependency cannot be found in any configured repository, the install
-  fails with a complete list of all unsatisfiable dependencies before any
-  packages are fetched.
+- Dependencies are unversioned ranges (major only), not pinned versions.
+  You are declaring interface compatibility, not reproducibility.
+- The `elsi` package manager does not auto-resolve dependency trees. It checks
+  your direct dependencies and reports what is missing. Fetching dependencies
+  is the user's responsibility (or a future `elsi install --deps` flag).
+- All ELSI binaries are statically linked, which eliminates the shared library
+  dependency problem entirely. If your package depends on another package, it
+  is because it invokes that package's *commands* at runtime, not its libraries
+  at link time.
 
 A typical ELSI dependency list is short. A Lua application depends on `lua`.
 A shell script depends on `ash` (or whichever shell provides `sh`). Most
@@ -244,7 +211,7 @@ Notable things that are explicitly **not** guaranteed in the script environment:
   call `date` and act on the result, log timestamps as meaningful data, or
   fail based on the current year. If your script needs to record when something
   happened, let the package manager handle it — it already writes `********`
-  to the Last Act field when the clock is untrustworthy.
+  to the LastAct field when the clock is untrustworthy.
 - Any package outside the bootstrap set that is not a declared dependency
 
 *(The full list of guaranteed utilities, the bootstrap package set definition,
@@ -295,13 +262,11 @@ back to the project.)*
   environment may differ. This needs a formal convention.
 - **Config file handling** — the policy for not clobbering user-edited config
   files needs a concrete mechanism before implementation.
+- **Dependency auto-fetch** — should `elsi install` offer to fetch unsatisfied
+  dependencies automatically, or always stop and report? The current position
+  is warn-and-stop, but this may evolve.
 - **`elsi repos` command** — listing and verifying configured repositories.
   Not yet designed.
-- **Shared text and ABI stability** — if ELKS develops shared text segment
-  support for heterogeneous binaries, the dependency model will need to address
-  ABI versioning. The current format can accommodate additional constraint
-  fields without breaking existing declarations, but the policy would need
-  design work. This is a future concern, not a rev 0.1 concern.
 
 ---
 
