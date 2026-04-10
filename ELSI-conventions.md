@@ -32,6 +32,20 @@ targets.
 
 ---
 
+## Hardware Constraints Philosophy
+
+ELSI accepts hardware limitations only when lack of creativity or sheer
+combinatorics make them unavoidable — not before. Running on a 4.77 MHz 8088
+with 640K of RAM is a constraint; writing lazy algorithms because the hardware
+is old is a choice. Make the right choice.
+
+Applied in practice: if a problem has a correct solution that works within the
+hardware envelope, use it. If it does not, document why not and what the
+trade-off is. "It's an XT" is not a justification for sloppy design; it is a
+prompt to be creative.
+
+---
+
 ## Data Formats
 
 - **Line-oriented flat files, not JSON.** JSON was considered and explicitly

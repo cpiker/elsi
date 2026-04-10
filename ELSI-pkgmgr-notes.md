@@ -31,10 +31,20 @@ Use this program to design legal battletech record sheets and print them out on
 a dot-matrix printer. All mech-mountable equipment for the 3025 era is supported.
 
 $ elsi install mechb
+btech requires the following packages:
+   luacu [luacuX01] - LUA Curses Interface extra small for ELKS
+   lua   [lua__X51] - LUA Interpreter
+Install these as well? (y/n)
+
+package luacu installed
+package lua__ installed
 package mechb10x installed
 mechb
 
 $ elsi remove mechb
+
+$ elsi assume luacuX01
+luacu marked as assumed present.
 ```
 
 ### Short Name Resolution
@@ -54,11 +64,132 @@ more than one repo.
 
 - `elsi search <terms>` — search package descriptions across all cached repo indexes
 - `elsi info <name>` — show full description for a package (installed or available)
-- `elsi install <name>` — fetch and install a package from a repository
+- `elsi install <name>` — fetch and install a package, resolving dependencies
 - `elsi remove <name>` — remove an installed package (tombstone in index)
+- `elsi assume <stem>` — assert that a package is present without installing it
 - `elsi list` — list installed packages
 - `elsi update` — refresh all cached repo index files from their FTP sources
 - `elsi tidy` — compact tombstoned records from the installed index
+
+---
+
+## Dependency Resolution
+
+### Transitive Resolution
+
+`elsi install` resolves the full transitive dependency set before fetching
+anything. If package A requires B, and B requires C, all three are resolved
+before the user is prompted or any network activity begins.
+
+Resolution uses an iterative worklist algorithm, not recursion. Recursion is
+the wrong tool for graph walking on any platform, and is particularly
+inadvisable on IA-16 hardware where the default process stack is 2KB. The
+worklist approach:
+
+1. Seed the worklist with the direct dependencies of the requested package.
+2. Pull one entry from the worklist.
+3. If already installed or already in the resolved set, skip it.
+4. Otherwise add it to the resolved set and push its dependencies onto the
+   worklist.
+5. Repeat until the worklist is empty.
+
+This naturally handles diamond dependencies (A requires B and C; B also
+requires C — C appears once in the resolved set) without special-casing.
+
+The worklist is a fixed-size array. For a package set of realistic ELSI size,
+this is never a constraint in practice, but if the worklist overflows the
+implementation must fail with a clear message rather than silently producing
+an incomplete dependency set.
+
+### Missing Package Handling
+
+The full resolution pass completes before any error is reported. If multiple
+dependencies are unsatisfiable, all are collected and reported together in a
+single error message. The install does not proceed.
+
+```
+Cannot install btech: the following required packages are not available
+in any configured repository:
+   luacu
+   lua
+```
+
+This is friendlier than failing on the first missing package and forcing the
+user to iterate.
+
+### Dependency Prompt
+
+When dependencies beyond the requested package must be installed, the user is
+shown the full set and asked to confirm:
+
+```
+btech requires the following packages:
+   luacu [luacuX01] - LUA Curses Interface extra small for ELKS
+   lua   [lua__X51] - LUA Interpreter
+Install these as well? (y/n)
+```
+
+The display shows the short name, the resolved package stem in brackets, and
+the short description from the repo index. Repository source is not shown
+unless the same package name appears in multiple repos, in which case the
+winning repo is noted.
+
+The `?` option (per-package confirmation loop) is reserved for a future
+revision. It is not implemented in rev 0.1 but the prompt should use `(y/n)`
+phrasing that does not preclude adding `?` later.
+
+### CHEAT Packages and Dependency Satisfaction
+
+A package with source field `CHEAT` (see *elsi assume* below) is treated as
+satisfying any dependency on that package name. The package manager does not
+warn at dependency-check time about assumed packages — the sysadmin has already
+made their assertion.
+
+---
+
+## elsi assume
+
+`elsi assume <stem>` records a package as present in `instpkgs.idx` without
+fetching or installing anything. It is the sysadmin's assertion that the
+package exists — useful when a binary has been installed by hand, copied
+directly, or is known to be present from a source outside ELSI's knowledge.
+
+The resulting index record has:
+
+- Status `I` (installed — it is being asserted as present)
+- Source field `CHEAT`
+- Last Act `********` (no reliable install time)
+
+The info file for an assumed package contains:
+
+```
+This package was not installed by elsi.
+The sysadmin asserted it exists. elsi took their word for it.
+---
+```
+
+No file list follows the delimiter. `elsi remove` on a CHEAT package therefore
+has no files to delete from the filesystem. It prompts:
+
+```
+luacu was asserted, not installed. No files will be removed.
+Remove the record? (y/n)
+```
+
+The source tag `CHEAT` is an internal identifier. It appears in `instpkgs.idx`
+and is documented in `elsipkg.5`. It does not appear in user-facing prompts or
+error messages, which use the word "asserted" or "assumed" instead. Finding
+`CHEAT` in the index or the man page is left as a small reward for the curious.
+
+### Reserved Source Tags
+
+The following source tags are reserved in `instpkgs.idx` and must not be used
+as repository names in `repos`:
+
+| Tag   | Meaning |
+|-------|---------|
+| `LOCAL` | Installed directly from a file on local disk, not from a repository |
+| `CHEAT` | Asserted present by sysadmin via `elsi assume`. Nothing was installed. |
 
 ---
 
@@ -70,7 +201,7 @@ more than one repo.
 /var/elsi/repos            ← repository definitions (INI format, human-edited)
 /var/elsi/<tag>.idx        ← per-repo cached package index (e.g. elsi.idx, home.idx)
 /var/elsi/lock             ← package manager lock file (prevents concurrent elsi runs)
-/var/elsi/instpkgs/<stem>      ← per-package info file: description + file list
+/var/elsi/instpkgs/<stem>  ← per-package info file: description + file list
 ```
 
 The `instpkgs/` subdirectory holds one file per installed package, extracted from
@@ -95,7 +226,8 @@ extension — the directory context makes their purpose clear.
 Info files are retained through tombstone (`R`) status and deleted only when
 `elsi tidy` compacts the record out of the installed index. A package with
 status `N` (needed, not yet fetched) has no info file — its description is
-served from the cached repo index until install time.
+served from the cached repo index until install time. A CHEAT package has an
+info file but no file list.
 
 The `lock` file is created at the start of any operation that modifies
 `instpkgs.idx` or the `instpkgs/` tree, and removed on clean exit. Its presence
@@ -174,12 +306,6 @@ ftp   192.168.1.10
   inline, where a user will see it when they open the file to add a repo.
   Not everyone reads man pages before editing a config file.
 
-### Reserved Source Tag
-
-The tag `LOCAL` (uppercase) is reserved in `instpkgs.idx` to indicate a package
-installed directly from a local file rather than from any repository. It must
-not be used as a repository name in `repos`.
-
 ---
 
 ## Per-Repo Index Files: `<tag>.idx`
@@ -240,6 +366,7 @@ Key properties:
 - A file of only `N` records is a valid install queue — hand-editing is supported
 - Each installed package has a corresponding `instpkgs/<stem>` file (description +
   file list); retained through `R` status, removed by `elsi tidy`
+- CHEAT packages have an info file with no file list section
 
 ---
 
@@ -258,7 +385,12 @@ Key properties:
   algorithm, not just the outline above.
 - **`elsipkg.5` man page** — the authoritative format reference for
   `instpkgs.idx`, `repos`, the per-repo `.idx` stanza format, and the `instpkgs/`
-  file format. Section 5 is correct for file format documentation.
+  file format. Section 5 is correct for file format documentation. Must document
+  the `CHEAT` source tag and the `elsi assume` command.
+- **Initial package count** — the total number of packages in an ELSI 0.1
+  release needs to be counted against the current ELKS userspace to verify
+  that worklist sizing assumptions hold and that dependency graphs are as
+  shallow as expected. This should be done before implementation begins.
 
 ---
 

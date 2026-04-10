@@ -316,6 +316,7 @@ and may not be used as a repo name:
 | Keyword | Meaning |
 |---------|---------|
 | `LOCAL` | Installed directly from a file on local disk, not from any repository |
+| `CHEAT` | Asserted present by sysadmin via `elsi assume`. Nothing was installed. |
 
 Repository tags are user-defined 1–5 character strings. The installer may create
 a default repo entry named `elsi` pointing at a canonical mirror, but `elsi` is
@@ -350,7 +351,8 @@ A `elsipkg.5` man page is needed. Section 5 is the correct section for file
 format documentation (per Unix convention: "File formats and conventions",
 canonical example `/etc/passwd`). The man page should document field layout,
 column positions, reserved keywords, status codes, date format, the repos file
-format, and the package filename encoding/decoding scheme.
+format, the package filename encoding/decoding scheme, and the `CHEAT` source
+tag and its associated `elsi assume` command.
 
 ---
 
@@ -530,6 +532,11 @@ computing community that ELSI hopes to attract.
   on IA-16 hardware? Measure wall-clock install time over both NIC and SLIP
   paths for a representative package in both formats. CPU cost of decompression
   may exceed transfer-time savings on slow connections.
+- **RESEARCH NEEDED**: Count the full set of packages that would constitute an
+  ELSI 0.1 release by surveying the current ELKS userspace. The total package
+  count and the shape of the dependency graph affect worklist sizing assumptions
+  in the package manager and the plausibility of claims about dependency graph
+  depth. Do this before implementation begins.
 
 ---
 
@@ -538,10 +545,10 @@ computing community that ELSI hopes to attract.
 Topics raised but not yet designed:
 
 - **`elsipkg.5` man page** — documents the installed package index format, field
-  layout, column positions, status codes, date convention, reserved keywords,
-  the repos file format, the per-repo `.idx` stanza format, the `instpkgs/` combined
-  file format, and package filename encoding. Section 5 is correct for file
-  format documentation.
+  layout, column positions, status codes, date convention, reserved keywords
+  (including `LOCAL` and `CHEAT`), the repos file format, the per-repo `.idx`
+  stanza format, the `instpkgs/` combined file format, and package filename
+  encoding. Section 5 is correct for file format documentation.
 - **Server-side package index format** — the stanza format (stem / short desc /
   long desc / md5 / blank line) is outlined in ELSI-pkgmgr-notes.md. Full
   specification belongs in the `elsipkg.5` man page.
